@@ -15,6 +15,7 @@ include(generated/rexglue.cmake)
 set(AC6RECOMP_SOURCES
     src/main.cpp
     src/render_hooks.cpp
+    src/d3d_hooks.cpp
 )
 
 if(WIN32)

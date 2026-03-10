@@ -1,7 +1,3 @@
-// ac6recomp - ReXGlue Recompiled Project
-//
-// This file is yours to edit. 'rexglue migrate' will NOT overwrite it.
-
 #include "generated/ac6recomp_config.h"
 #include "generated/ac6recomp_init.h"
 

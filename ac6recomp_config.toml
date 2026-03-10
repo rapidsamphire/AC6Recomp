@@ -57,6 +57,7 @@ memmove_s = 0x823809F0
 0x820f5fc0 = {}
 0x820f5fb0 = {} 
 0x82272990 = {}
+0x82272668 = {}
 0x820f6000 = {}
 0x822729a8 = {}
 0x822f7120 = {}
@@ -10550,28 +10551,57 @@ memmove_s = 0x823809F0
 0x823E0ED8 = { name = "rex_sub_823E0ED8" }
 0x823E1060 = { name = "rex_sub_823E1060" }
 0x823E1250 = { name = "rex_sub_823E1250" }
+0x821e27b8 = {}
 0x823E1320 = { name = "rex_sub_823E1320" }
 0x823E13F0 = { name = "rex_sub_823E13F0" }
+0x82272c98 = {}
 
 # ---------------------------------------------------------------------------
 # Midasm hooks — 60fps unlock (Phase 1)
 # ---------------------------------------------------------------------------
 
-# Skip `ori r3,r3,2` that sets vsync swap interval to 2 (30fps lock).
-# When hook returns true, jumps past the ori to 0x821F075C.
+# Bypass the flip interval gate in the vblank handler (rex_sub_821EEAC8).
+# At 0x821EEBE4, the `ble cr6,0x821EEBEC` branches to the render path
+# In D3D_VblankHandler (0x821EEAC8), the branch at 0x821EEBE0
+# takes the render path when the vblank counter (offset 52) <= 1.
+# This hook was intended as the 60fps unlock but the counter
+# naturally cycles 0→1→0 per frame, so the condition always passes
+# and the hook never actually fires. Kept for safety/fallback.
 [[midasm_hook]]
-address = 0x821F0758
-name = "ac6VsyncIntervalHook"
-jump_address_on_true = 0x821F075C
+address = 0x821EEBE4
+name = "ac6FlipIntervalHook"
+jump_address_on_true = 0x821EEBEC
 
 # Override the FPS divisor in the delta time formula.
-# r29 holds the divisor (default 60); hook sets it to 30 when unlocked.
+# r29 holds the divisor (default 60); hook always sets it to 30
+# so the delta formula produces correct game speed at any framerate.
+# At 30fps: delta = min(101, 100) = 100.  At 60fps: delta ≈ 51.
+# Both yield ~3000 sim-units/sec matching the original 30fps baseline.
 [[midasm_hook]]
 address = 0x821EFD38
 name = "ac6DeltaDivisorHook"
 registers = ["r29"]
 
-# Record frame timestamps before VdSwap for timing overlay.
+# Record frame timestamps at each D3DDevice_Swap call for timing overlay.
+# Placed before the device[21516] branch so it fires unconditionally —
+# when that field is non-zero the function skips VdSwap, which caused
+# the old hook at 0x821F0664 to miss every other frame at 60fps.
 [[midasm_hook]]
-address = 0x821F0664
+address = 0x821F05F8
 name = "ac6PresentTimingHook"
+
+# Force D3DPRESENT_INTERVAL to ONE (60fps) when the unlock CVar is on.
+#
+# In sub_821EFE78 (the EndFrame/present-interval encoder), the game
+# loads D3DPRESENT_INTERVAL from device[13580] into r10 at 0x821EFF2C.
+# The comparison chain starting at 0x821EFF30 converts it to a GPU
+# swap interval count (2 = every 2nd VBlank = 30fps).
+#
+# This hook fires before the first comparison; when enabled it forces
+# r10 = 1 (INTERVAL_ONE) and jumps to loc_821EFF74 which is the
+# existing code path for "present every VBlank" = 60fps.
+[[midasm_hook]]
+address = 0x821EFF30
+name = "ac6PresentIntervalHook"
+registers = ["r10"]
+jump_address_on_true = 0x821EFF74

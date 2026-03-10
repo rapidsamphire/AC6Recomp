@@ -1,7 +1,3 @@
-/**
- * @file        render_hooks.h
- * @brief       Mid-asm hooks for vsync interval, frame timing, and 60fps unlock.
- */
 #pragma once
 
 #include <cstdint>

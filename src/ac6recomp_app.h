@@ -1,8 +1,3 @@
-// ac6recomp - ReXGlue Recompiled Project
-//
-// This file is yours to edit. 'rexglue migrate' will NOT overwrite it.
-// Customize your app by overriding virtual hooks from rex::ReXApp.
-
 #pragma once
 
 #include <rex/cvar.h>
@@ -25,7 +20,6 @@ class Ac6recompApp : public rex::ReXApp {
 
  protected:
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    // Fix black triangles caused by vertex fetch index precision (RCP).
     REXCVAR_SET(vfetch_index_rounding_bias, true);
   }
 
@@ -36,7 +30,4 @@ class Ac6recompApp : public rex::ReXApp {
     });
   }
 
-  // void OnPostSetup() override {}
-  // void OnShutdown() override {}
-  // void OnConfigurePaths(rex::PathConfig& paths) override {}
 };
