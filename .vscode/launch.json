@@ -11,9 +11,8 @@
                 "--enable_console=false",
                 "--log_level=info",
                 "--d3d12_allow_variable_refresh_rate_and_tearing=true",
-                "--swap_post_effect=fxaa",
-                "--present_effect=bilinear",
-                "--present_fsr_quality_mode=fsr",
+                "--present_effect=fsr3",
+                "--present_fsr_quality_mode=nativeaa",
                 "--resolution=1440p",
                 "--fullscreen=true"
             ],
