@@ -17,6 +17,14 @@ ac6::d3d::ShadowState g_shadow{};
 ac6::d3d::DrawStats g_live_stats{};
 ac6::d3d::DrawStatsSnapshot g_snapshot{};
 
+// Double-buffered draw log: write_log accumulates during the frame,
+// read_log holds the previous frame's captures for consumers.
+ac6::d3d::FrameDrawLog g_draw_log[2]{};
+uint32_t g_draw_log_write{0};  // Index into g_draw_log for current frame
+
+ac6::d3d::FrameDrawLog& WriteLog() { return g_draw_log[g_draw_log_write]; }
+const ac6::d3d::FrameDrawLog& ReadLog() { return g_draw_log[g_draw_log_write ^ 1]; }
+
 }  // namespace
 
 PPC_EXTERN_FUNC(__imp__rex_sub_821DEF18);  // DrawIndexedVertices
@@ -40,38 +48,58 @@ PPC_EXTERN_FUNC(__imp__rex_sub_821E10C8);  // SetTextureFetchConstant
 PPC_EXTERN_FUNC(__imp__rex_sub_821E2BB8);  // Resolve
 
 // D3DDevice_DrawIndexedVertices (0x821DEF18)
+// r3=pDevice, r4=PrimitiveType, r5=StartIndex, r6=IndexCount
 PPC_FUNC_IMPL(rex_sub_821DEF18) {
     PPC_FUNC_PROLOGUE();
 
+    uint32_t prim_type = ctx.r4.u32;
+    uint32_t start_index = ctx.r5.u32;
     uint32_t index_count = ctx.r6.u32;
 
     g_live_stats.draw_calls.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.draw_calls_indexed.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.total_indices.fetch_add(index_count, std::memory_order_relaxed);
 
+    {
+        auto& cap = WriteLog().Append(ac6::d3d::DrawType::Indexed, g_shadow);
+        cap.primitive_type = prim_type;
+        cap.start_index = start_index;
+        cap.count = index_count;
+    }
+
     if (REXCVAR_GET(ac6_d3d_trace)) {
         REXLOG_CAT_TRACE(kLogGPU,
             "DrawIndexedVertices: prim={} start={} count={}",
-            ctx.r4.u32, ctx.r5.u32, index_count);
+            prim_type, start_index, index_count);
     }
 
     __imp__rex_sub_821DEF18(ctx, base);
 }
 
 // D3DDevice_DrawIndexedVertices_Shared (0x821DF300)
+// r3=pDevice, r4=PrimitiveType, r5=Flags, r6=StartIndex, r7=IndexCount
 PPC_FUNC_IMPL(rex_sub_821DF300) {
     PPC_FUNC_PROLOGUE();
 
+    uint32_t prim_type = ctx.r4.u32;
+    uint32_t start_index = ctx.r6.u32;
     uint32_t index_count = ctx.r7.u32;
 
     g_live_stats.draw_calls.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.draw_calls_indexed_shared.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.total_indices.fetch_add(index_count, std::memory_order_relaxed);
 
+    {
+        auto& cap = WriteLog().Append(ac6::d3d::DrawType::IndexedShared, g_shadow);
+        cap.primitive_type = prim_type;
+        cap.start_index = start_index;
+        cap.count = index_count;
+    }
+
     if (REXCVAR_GET(ac6_d3d_trace)) {
         REXLOG_CAT_TRACE(kLogGPU,
             "DrawIndexedVertices_Shared: prim={} flags={} start={} count={}",
-            ctx.r4.u32, ctx.r5.u32, ctx.r6.u32, index_count);
+            prim_type, ctx.r5.u32, start_index, index_count);
     }
 
     __imp__rex_sub_821DF300(ctx, base);
@@ -211,6 +239,12 @@ PPC_FUNC_IMPL(rex_sub_821DEA48) {
     g_live_stats.draw_calls.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.draw_calls_primitive.fetch_add(1, std::memory_order_relaxed);
     g_live_stats.total_vertices.fetch_add(vertex_count, std::memory_order_relaxed);
+
+    {
+        auto& cap = WriteLog().Append(ac6::d3d::DrawType::Primitive, g_shadow);
+        cap.primitive_type = prim_type;
+        cap.count = vertex_count;
+    }
 
     if (REXCVAR_GET(ac6_d3d_trace)) {
         REXLOG_CAT_TRACE(kLogGPU,
@@ -433,6 +467,10 @@ void OnFrameBoundary() {
     g_snapshot.resolve_calls             = g_live_stats.resolve_calls.load(std::memory_order_relaxed);
 
     g_live_stats.Reset();
+
+    // Swap draw log buffers: current write becomes read, old read becomes new write
+    g_draw_log_write ^= 1;
+    WriteLog().Reset();
 }
 
 const DrawStatsSnapshot& GetDrawStats() {
@@ -441,6 +479,10 @@ const DrawStatsSnapshot& GetDrawStats() {
 
 const ShadowState& GetShadowState() {
     return g_shadow;
+}
+
+const FrameDrawLog& GetFrameDrawLog() {
+    return ReadLog();
 }
 
 }  // namespace ac6::d3d

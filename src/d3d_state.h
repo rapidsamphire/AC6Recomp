@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <vector>
 
 namespace ac6::d3d {
 
@@ -105,6 +106,74 @@ struct ShadowState {
         uint32_t width{0};
         uint32_t height{0};
     } viewport;
+};
+
+enum class DrawType : uint8_t {
+    Indexed,
+    IndexedShared,
+    Primitive,
+};
+
+struct DrawCallCapture {
+    uint32_t draw_id{0};       // Monotonic per-frame draw index
+    DrawType type{DrawType::Indexed};
+    uint32_t primitive_type{0};
+    uint32_t start_index{0};   // Start index (indexed) or unused (primitive)
+    uint32_t count{0};         // Index count or vertex count
+
+    // Full binding snapshot (copied from ShadowState at draw time)
+    std::array<uint32_t, kMaxRenderTargets> render_targets{};
+    uint32_t depth_stencil{0};
+    std::array<uint32_t, kMaxTextures> textures{};
+    uint32_t vertex_declaration{0};
+    uint32_t index_buffer{0};
+    std::array<StreamBinding, kMaxStreams> streams{};
+    std::array<SamplerBinding, kMaxSamplers> samplers{};
+    std::array<uint32_t, kMaxFetchConstants> texture_fetch_ptrs{};
+    uint32_t shader_gpr_alloc{0};
+
+    struct {
+        uint32_t x{0};
+        uint32_t y{0};
+        uint32_t width{0};
+        uint32_t height{0};
+    } viewport;
+};
+
+inline constexpr uint32_t kMaxDrawCapturesPerFrame = 4096;
+
+struct FrameDrawLog {
+    std::vector<DrawCallCapture> captures;
+    uint32_t next_draw_id{0};
+
+    void Reserve() { captures.reserve(kMaxDrawCapturesPerFrame); }
+
+    void Reset() {
+        captures.clear();
+        next_draw_id = 0;
+    }
+
+    DrawCallCapture& Append(DrawType type, const ShadowState& state) {
+        auto& c = captures.emplace_back();
+        c.draw_id = next_draw_id++;
+        c.type = type;
+
+        c.render_targets = state.render_targets;
+        c.depth_stencil = state.depth_stencil;
+        c.textures = state.textures;
+        c.vertex_declaration = state.vertex_declaration;
+        c.index_buffer = state.index_buffer;
+        c.streams = state.streams;
+        c.samplers = state.samplers;
+        c.texture_fetch_ptrs = state.texture_fetch_ptrs;
+        c.shader_gpr_alloc = state.shader_gpr_alloc;
+        c.viewport.x = state.viewport.x;
+        c.viewport.y = state.viewport.y;
+        c.viewport.width = state.viewport.width;
+        c.viewport.height = state.viewport.height;
+
+        return c;
+    }
 };
 
 }  // namespace ac6::d3d
