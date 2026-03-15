@@ -16,3 +16,6 @@ assets/
 
 # CMake user presets (machine-local)
 CMakeUserPresets.json
+
+# Local git worktrees
+.worktrees/
